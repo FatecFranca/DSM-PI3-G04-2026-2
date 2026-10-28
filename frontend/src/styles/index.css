@@ -1,0 +1,199 @@
+@import '@fontsource-variable/plus-jakarta-sans';
+@import 'leaflet/dist/leaflet.css';
+@import 'tailwindcss';
+
+/* ------------------------------------------------------------------
+   Design tokens — Rolê de Pet
+   Brand palette is fixed; "accent" switches with the account mode
+   (tutor = vinho, dog walker = dourado) via [data-mode] on <html>.
+------------------------------------------------------------------- */
+@theme {
+  --font-sans: 'Plus Jakarta Sans Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --color-wine-50: #fbf1f5;
+  --color-wine-100: #f5dfe8;
+  --color-wine-200: #e9bccd;
+  --color-wine-400: #9e3a5e;
+  --color-wine-500: #7a2145;
+  --color-wine-700: #4a0e24;
+
+  --color-gold-50: #fff8e6;
+  --color-gold-100: #fdecbf;
+  --color-gold-400: #fbbf45;
+  --color-gold-500: #f9a825;
+  --color-gold-700: #b8860b;
+  --color-gold-800: #8a6408;
+
+  --color-cream-50: #fdf6ef;
+  --color-cream-100: #f7ede2;
+  --color-sand-200: #e8d5c4;
+  --color-sand-300: #d9c0aa;
+
+  --color-ink-900: #2d1b14;
+  --color-ink-600: #6b5b52;
+  --color-ink-400: #9a8b82;
+
+  --color-success-50: #ecf7f0;
+  --color-success-600: #1f7a4d;
+  --color-danger-50: #fdeeee;
+  --color-danger-600: #b42318;
+  --color-info-50: #eef4fb;
+  --color-info-600: #2a5f9e;
+
+  --shadow-card: 0 1px 2px rgb(45 27 20 / 0.04), 0 6px 20px -8px rgb(45 27 20 / 0.12);
+  --shadow-float: 0 12px 40px -12px rgb(45 27 20 / 0.28);
+  --shadow-bar: 0 -6px 24px -12px rgb(45 27 20 / 0.18);
+
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.75rem;
+
+  --animate-fade-up: fade-up 0.35s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  --animate-sheet-up: sheet-up 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-fade-in: fade-in 0.2s ease-out both;
+  --animate-pulse-ring: pulse-ring 1.8s ease-out infinite;
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes sheet-up {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes pulse-ring {
+    0% { transform: scale(0.6); opacity: 0.7; }
+    100% { transform: scale(2.2); opacity: 0; }
+  }
+}
+
+/* Mode-dependent accent, consumed as bg-accent / text-accent-ink etc. */
+@theme inline {
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+  --color-on-accent: var(--on-accent);
+}
+
+:root {
+  --accent: #7a2145;
+  --accent-hover: #4a0e24;
+  --accent-soft: #fbf1f5;
+  /* accent used for small text on light backgrounds */
+  --accent-ink: #7a2145;
+  --on-accent: #ffffff;
+  --bottom-nav-h: 64px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+:root[data-mode='walker'] {
+  --accent: #f9a825;
+  --accent-hover: #fbbf45;
+  --accent-soft: #fff8e6;
+  --accent-ink: #8a6408;
+  --on-accent: #2d1b14;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-cream-50 font-sans text-ink-900 antialiased;
+    overflow-x: hidden;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: 2px;
+  }
+  button:not(:disabled),
+  [role='button'] {
+    cursor: pointer;
+  }
+  input,
+  select,
+  textarea {
+    font-size: 16px; /* prevents iOS zoom */
+  }
+}
+
+@utility container-page {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 80rem;
+  padding-inline: 1rem;
+  @media (width >= 40rem) {
+    padding-inline: 1.5rem;
+  }
+  @media (width >= 64rem) {
+    padding-inline: 2.5rem;
+  }
+}
+
+/* Space reserved so the fixed bottom nav never hides content */
+@utility pb-nav {
+  padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 24px);
+  @media (width >= 64rem) {
+    padding-bottom: 48px;
+  }
+}
+
+@utility safe-bottom {
+  padding-bottom: var(--safe-bottom);
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility snap-row {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 1rem;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Leaflet adjustments */
+.leaflet-container {
+  font-family: inherit;
+  background: #f2ebe3;
+}
+.leaflet-tile-pane {
+  filter: saturate(0.55) sepia(0.08) brightness(1.03) contrast(0.96);
+}
+.leaflet-control-attribution {
+  font-size: 10px !important;
+}
+.rdp-marker {
+  background: transparent;
+  border: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Global keyframes (also used by inline-styled map markers) */
+@keyframes pulse-ring {
+  0% { transform: scale(0.6); opacity: 0.7; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
