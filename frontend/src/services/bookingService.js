@@ -1,17 +1,20 @@
-import { applyTransition, BOOKING_STATUS as S, STATUS_META, canTransition } from '../features/bookings/bookingStateMachine';
+import { BOOKING_STATUS as S, applyTransition, canTransition } from '../features/bookings/bookingStateMachine';
 import { quote } from './pricing';
 import { isAvailableOn } from './availabilityService';
-import { notify, newId } from './notificationService';
+import { notify } from './notificationService';
 import { compatibilityWarnings } from '../features/walkers/walkerSelectors';
-import { formatRelativeDay, toTimestamp } from '../utils/dates';
-import { firstName } from '../utils/format';
+import { formatRelativeDay } from '../utils/dates';
+import { firstName, formatBRL } from '../utils/format';
 import { routeLengthKm } from './trackingService';
-import { PAYMENT_STATUS as P, walkerPayout } from '../features/payments/paymentSplit';
-import { formatBRL } from '../utils/format';
+import { walkerPayout } from '../features/payments/paymentSplit';
+import { api } from '../api';
 
-// All booking mutations are pure (state) => state functions.
-// Validation errors are thrown as BookingError with a user-facing message (pt-BR).
-// To plug a real API, keep these signatures and move the logic server-side.
+// Fase 4: as regras de negócio do passeio (transições por ator, pagamento em 2
+// parcelas, código de retirada, avaliação) rodam no backend (PasseioService).
+// Aqui ficam: a validação local instantânea (mesmas mensagens, com `field` para
+// o formulário), as chamadas à API com erro convertido em BookingError, a
+// mesclagem do retorno do servidor com o tracking simulado localmente e as
+// notificações locais (ainda não vão para o backend).
 
 export class BookingError extends Error {
   constructor(message, field) {
@@ -21,24 +24,60 @@ export class BookingError extends Error {
   }
 }
 
-const findBooking = (state, id) => {
-  const booking = state.bookings.find((b) => b.id === id);
-  if (!booking) throw new BookingError('Passeio não encontrado.');
-  return booking;
+/** Converte erros da API ({"message", "field"?}) em BookingError para o formulário/toast */
+const erroDeApi = (error) => {
+  const corpo = error.response?.data;
+  const mensagem = corpo?.message ?? 'Não foi possível falar com o servidor. Tente novamente.';
+  return new BookingError(mensagem, corpo?.field);
 };
 
-const replaceBooking = (state, booking) => ({
-  ...state,
-  bookings: state.bookings.map((b) => (b.id === booking.id ? booking : b)),
-});
+// ------------------------------------------------------------------
+// Chamadas à API (o backend é a fonte de verdade de negócio)
+// ------------------------------------------------------------------
 
-const ctx = (state, booking) => ({
-  walker: state.walkers.find((w) => w.id === booking.walkerId),
-  pet: state.pets.find((p) => p.id === booking.petId),
-  owner: state.users.find((u) => u.id === booking.ownerId),
-});
+export async function criarNaApi(input) {
+  try {
+    return (await api.post('/passeios', input)).data;
+  } catch (error) {
+    throw erroDeApi(error);
+  }
+}
 
-const randomCode = () => String(Math.floor(1000 + Math.random() * 9000));
+export async function transicionarNaApi(bookingId, to, actor) {
+  try {
+    return (await api.post(`/passeios/${bookingId}/transicoes`, { to, actor })).data;
+  } catch (error) {
+    throw erroDeApi(error);
+  }
+}
+
+export async function pagarNaApi(bookingId, methodId) {
+  try {
+    return (await api.post(`/passeios/${bookingId}/pagamento`, { methodId })).data;
+  } catch (error) {
+    throw erroDeApi(error);
+  }
+}
+
+export async function confirmarRetiradaNaApi(bookingId, code) {
+  try {
+    return (await api.post(`/passeios/${bookingId}/retirada`, { code })).data;
+  } catch (error) {
+    throw erroDeApi(error);
+  }
+}
+
+export async function avaliarNaApi(bookingId, rating, comment) {
+  try {
+    return (await api.post(`/passeios/${bookingId}/avaliacao`, { rating, comment })).data;
+  } catch (error) {
+    throw erroDeApi(error);
+  }
+}
+
+// ------------------------------------------------------------------
+// Validação local (erros instantâneos, antes de chamar a API)
+// ------------------------------------------------------------------
 
 export function validateBookingInput(state, { walkerId, petId, date, time, duration }) {
   const walker = state.walkers.find((w) => w.id === walkerId);
@@ -57,54 +96,59 @@ export function validateBookingInput(state, { walkerId, petId, date, time, durat
   return { walker, pet };
 }
 
-/** Tutor creates a request → status "requested" */
-export function createBooking(state, { ownerId, walkerId, petId, date, time, duration, notes = '' }) {
-  const { walker, pet } = validateBookingInput(state, { walkerId, petId, date, time, duration });
-  const owner = state.users.find((u) => u.id === ownerId);
-  const q = quote(walker, duration);
+// ------------------------------------------------------------------
+// Mesclagem servidor + tracking simulado
+// ------------------------------------------------------------------
+
+/**
+ * Patch de tracking aplicado localmente quando um status é alcançado.
+ * (Extraído da transitionBooking original: o tracking é simulação visual do
+ * front — o backend grava apenas status/histórico/pagamento/avaliação.)
+ */
+export function trackingPatch(booking, to) {
   const now = Date.now();
-  const booking = {
-    id: newId('b'),
-    ownerId,
-    walkerId,
-    petId,
-    date,
-    time,
-    duration,
-    ...q,
-    status: S.REQUESTED,
-    history: [{ status: S.REQUESTED, at: now, actor: 'owner' }],
-    pickupCode: randomCode(),
-    payment: { status: P.NONE, methodId: null, paidAt: null, firstReleaseAt: null, releasedAt: null },
-    tracking: { approachProgress: 0, walkProgress: 0, distanceKm: 0, elapsedMin: 0, startedAt: null, endedAt: null, routeSummary: `${owner?.address?.street?.split(',')[0] ?? 'Endereço do tutor'} → rota pelo bairro → retorno` },
-    review: null,
-    notes,
-    address: owner ? `${owner.address.street} — ${owner.address.neighborhood}` : '',
-    createdAt: now,
-    expiresAt: Math.min(now + 48 * 3600000, toTimestamp(date, time)),
-  };
-  let next = { ...state, bookings: [booking, ...state.bookings] };
-  next = notify(next, {
-    audience: 'walker',
-    userId: walkerId,
-    kind: 'booking',
-    title: 'Nova solicitação',
-    body: `${firstName(owner?.name)} solicitou ${duration} min para ${pet.name} — ${formatRelativeDay(date)} às ${time}.`,
-    link: `/dog-walker/solicitacoes/${booking.id}`,
-  });
-  next = notify(next, {
-    audience: 'owner',
-    userId: ownerId,
-    kind: 'booking',
-    title: 'Solicitação enviada',
-    body: `Aguardando ${firstName(walker.name)} aceitar o passeio de ${pet.name}.`,
-    link: `/tutor/passeios/${booking.id}`,
-  });
-  return { state: next, booking };
+  const tracking = booking.tracking || {};
+  if (to === S.WALKING) return { ...tracking, approachProgress: 1, startedAt: now };
+  if (to === S.PICKED_UP) return { ...tracking, approachProgress: 1 };
+  if (to === S.COMPLETED) {
+    return {
+      ...tracking,
+      walkProgress: 1,
+      endedAt: now,
+      elapsedMin: Math.max(tracking.elapsedMin ?? 0, booking.duration),
+      distanceKm: Math.max(tracking.distanceKm ?? 0, routeLengthKm(booking.duration)),
+    };
+  }
+  return {};
 }
 
-/** Messages sent to each side when a status is reached */
-function transitionNotifications(status, { walker, pet, owner }, booking) {
+/** Servidor vence nos campos de negócio; o tracking preserva a simulação local em curso. */
+export function mesclarBookingRemoto(serverBooking, localBooking, to) {
+  const base = localBooking ?? serverBooking;
+  const patch = trackingPatch(base, to);
+  return Object.keys(patch).length ? { ...serverBooking, tracking: { ...serverBooking.tracking, ...patch } } : serverBooking;
+}
+
+/** Hidratação (load do app): status divergente → servidor vence; igual → mantém o tracking local. */
+export function mesclarHidratado(serverBooking, localBooking) {
+  if (localBooking && localBooking.status === serverBooking.status && localBooking.tracking) {
+    return { ...serverBooking, tracking: localBooking.tracking };
+  }
+  return serverBooking;
+}
+
+// ------------------------------------------------------------------
+// Aplicação do retorno do servidor ao estado local (+ notificações)
+// ------------------------------------------------------------------
+
+const ctx = (state, booking) => ({
+  walker: state.walkers.find((w) => w.id === booking.walkerId),
+  pet: state.pets.find((p) => p.id === booking.petId),
+  owner: state.users.find((u) => u.id === booking.ownerId),
+});
+
+/** Mensagens enviadas a cada lado quando um status é alcançado */
+export function transitionNotifications(status, { walker, pet, owner }, booking) {
   const w = firstName(walker?.name);
   const o = firstName(owner?.name);
   const ownerLink = `/tutor/passeios/${booking.id}`;
@@ -146,77 +190,30 @@ function transitionNotifications(status, { walker, pet, owner }, booking) {
   }
 }
 
-/** Generic, validated status transition with side effects (payment, tracking, notifications) */
-export function transitionBooking(state, { bookingId, to, actor, extra = {} }) {
-  const booking = findBooking(state, bookingId);
-  if (!canTransition(booking.status, to, actor)) {
-    throw new BookingError(`Não é possível mudar de "${STATUS_META[booking.status].label}" para "${STATUS_META[to].label}".`);
-  }
-  const now = Date.now();
-  const patch = { ...extra };
-  if (to === S.WALKING) patch.tracking = { ...booking.tracking, approachProgress: 1, startedAt: now };
-  if (to === S.PICKED_UP) patch.tracking = { ...booking.tracking, approachProgress: 1 };
-  if (to === S.COMPLETED) {
-    patch.tracking = {
-      ...booking.tracking,
-      walkProgress: 1,
-      endedAt: now,
-      elapsedMin: Math.max(booking.tracking.elapsedMin, booking.duration),
-      distanceKm: Math.max(booking.tracking.distanceKm, routeLengthKm(booking.duration)),
-    };
-  }
-  // Second installment: released when the walker finishes the walk
-  if (to === S.COMPLETED && booking.payment.status === P.PARTIAL) patch.payment = { ...booking.payment, status: P.RELEASED, releasedAt: now };
-  // Cancel after payment: tutor → retained half refunded; walker → full refund
-  if (to === S.CANCELED && booking.payment.status === P.PARTIAL) {
-    patch.payment = { ...booking.payment, status: actor === 'owner' ? P.PARTIALLY_REFUNDED : P.REFUNDED, refundedAt: now };
-  }
-
-  const updated = applyTransition(booking, to, actor, patch);
-  let next = replaceBooking(state, updated);
-  if (to === S.COMPLETED) {
-    next = { ...next, walkers: next.walkers.map((w) => (w.id === updated.walkerId ? { ...w, walksCount: w.walksCount + 1 } : w)) };
-  }
-  const context = ctx(next, updated);
-  for (const n of transitionNotifications(to, context, updated)) {
-    next = notify(next, { ...n, userId: n.audience === 'owner' ? updated.ownerId : updated.walkerId });
-  }
-  return { state: next, booking: updated };
+/** Notificações da criação da solicitação (o backend devolve o passeio criado) */
+export function creationNotifications(booking, { walker, pet, owner }) {
+  return [
+    {
+      audience: 'walker',
+      kind: 'booking',
+      title: 'Nova solicitação',
+      body: `${firstName(owner?.name)} solicitou ${booking.duration} min para ${pet?.name} — ${formatRelativeDay(booking.date)} às ${booking.time}.`,
+      link: `/dog-walker/solicitacoes/${booking.id}`,
+    },
+    {
+      audience: 'owner',
+      kind: 'booking',
+      title: 'Solicitação enviada',
+      body: `Aguardando ${firstName(walker?.name)} aceitar o passeio de ${pet?.name}.`,
+      link: `/tutor/passeios/${booking.id}`,
+    },
+  ];
 }
 
-export const acceptBooking = (state, bookingId) => transitionBooking(state, { bookingId, to: S.ACCEPTED, actor: 'walker' });
-export const declineBooking = (state, bookingId) => transitionBooking(state, { bookingId, to: S.DECLINED, actor: 'walker' });
-export const cancelBooking = (state, bookingId, actor = 'owner') => transitionBooking(state, { bookingId, to: S.CANCELED, actor });
-
-/** Simulated payment: only allowed after acceptance; 50% goes to the walker right away */
-export function payBooking(state, { bookingId, methodId }) {
-  const booking = findBooking(state, bookingId);
-  if (booking.status !== S.ACCEPTED) throw new BookingError('O pagamento só pode ser feito depois que o dog walker aceitar.');
-  if (!methodId) throw new BookingError('Escolha uma forma de pagamento.', 'methodId');
-  return transitionBooking(state, {
-    bookingId,
-    to: S.PAID,
-    actor: 'owner',
-    extra: { payment: { status: P.PARTIAL, methodId, paidAt: Date.now(), firstReleaseAt: Date.now(), releasedAt: null } },
-  });
-}
-
-/** Walker confirms pickup with the tutor's 4-digit code */
-export function confirmPickup(state, { bookingId, code }) {
-  const booking = findBooking(state, bookingId);
-  if (String(code).trim() !== booking.pickupCode) throw new BookingError('Código incorreto. Peça ao tutor o código exibido no app.', 'code');
-  return transitionBooking(state, { bookingId, to: S.PICKED_UP, actor: 'walker' });
-}
-
-/** Tutor reviews a completed walk (independent from payment) */
-export function reviewBooking(state, { bookingId, rating, comment }) {
-  const booking = findBooking(state, bookingId);
-  if (booking.status !== S.COMPLETED) throw new BookingError('Só é possível avaliar passeios concluídos.');
-  if (!rating || rating < 1 || rating > 5) throw new BookingError('Escolha de 1 a 5 estrelas.', 'rating');
-  const review = { rating, comment: comment.trim(), at: Date.now() };
-  let { state: next } = transitionBooking(state, { bookingId, to: S.REVIEWED, actor: 'owner', extra: { review } });
-
-  const { walker, pet, owner } = ctx(next, booking);
+/** Efeitos locais da avaliação: registro público do perfil + walker atualizado. */
+export function registrarAvaliacao(state, booking) {
+  const { walker, pet, owner } = ctx(state, booking);
+  if (!walker || !booking.review) return state;
   const reviewRecord = {
     id: `r-${booking.id}`,
     walkerId: booking.walkerId,
@@ -225,22 +222,52 @@ export function reviewBooking(state, { bookingId, rating, comment }) {
     authorName: owner?.name ?? 'Tutor',
     authorAvatar: owner?.avatar ?? '',
     petName: pet?.name ?? '',
-    rating,
-    comment: review.comment,
-    at: review.at,
+    rating: booking.review.rating,
+    comment: booking.review.comment,
+    at: booking.review.at,
   };
-  const newCount = walker.reviewsCount + 1;
+  const antigoCount = walker.reviewsCount ?? 0;
+  const newCount = antigoCount + 1;
   const updatedWalker = {
     ...walker,
     reviewsCount: newCount,
-    rating: Math.round(((walker.rating * walker.reviewsCount + rating) / newCount) * 100) / 100,
+    rating: Math.round((((walker.rating ?? 0) * antigoCount + booking.review.rating) / newCount) * 100) / 100,
   };
-  next = {
-    ...next,
-    reviews: [reviewRecord, ...next.reviews],
-    walkers: next.walkers.map((w) => (w.id === walker.id ? updatedWalker : w)),
+  return {
+    ...state,
+    reviews: [reviewRecord, ...state.reviews],
+    walkers: state.walkers.map((w) => (w.id === walker.id ? updatedWalker : w)),
   };
-  return { state: next, booking: next.bookings.find((b) => b.id === bookingId) };
+}
+
+/** Aplica o passeio devolvido pelo backend: mescla, notifica e atualiza contadores locais */
+export function aplicarBookingRemoto(state, serverBooking, localBooking, to) {
+  const booking = mesclarBookingRemoto(serverBooking, localBooking, to);
+  let next = { ...state, bookings: state.bookings.map((b) => (b.id === booking.id ? booking : b)) };
+  const context = ctx(next, booking);
+  for (const n of transitionNotifications(serverBooking.status, context, booking)) {
+    next = notify(next, { ...n, userId: n.audience === 'owner' ? booking.ownerId : booking.walkerId });
+  }
+  if (serverBooking.status === S.COMPLETED) {
+    next = { ...next, walkers: next.walkers.map((w) => (w.id === booking.walkerId ? { ...w, walksCount: (w.walksCount ?? 0) + 1 } : w)) };
+  }
+  if (serverBooking.status === S.REVIEWED) next = registrarAvaliacao(next, booking);
+  return next;
+}
+
+// ------------------------------------------------------------------
+// Expiração local (o backend tem um scheduler com a mesma regra)
+// ------------------------------------------------------------------
+
+function aplicarTransicaoLocal(state, bookingId, to, actor) {
+  const booking = state.bookings.find((b) => b.id === bookingId);
+  if (!booking || !canTransition(booking.status, to, actor)) return state;
+  const updated = applyTransition(booking, to, actor);
+  let next = { ...state, bookings: state.bookings.map((b) => (b.id === bookingId ? updated : b)) };
+  for (const n of transitionNotifications(to, ctx(next, updated), updated)) {
+    next = notify(next, { ...n, userId: n.audience === 'owner' ? updated.ownerId : updated.walkerId });
+  }
+  return next;
 }
 
 /** Expires requests/acceptances whose response window has passed */
@@ -249,7 +276,7 @@ export function expireStaleBookings(state) {
   let next = state;
   for (const b of state.bookings) {
     if ((b.status === S.REQUESTED || b.status === S.ACCEPTED) && b.expiresAt < now) {
-      next = transitionBooking(next, { bookingId: b.id, to: S.EXPIRED, actor: 'system' }).state;
+      next = aplicarTransicaoLocal(next, b.id, S.EXPIRED, 'system');
     }
   }
   return next;

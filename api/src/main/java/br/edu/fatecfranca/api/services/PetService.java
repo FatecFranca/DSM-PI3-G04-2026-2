@@ -12,7 +12,7 @@ import br.edu.fatecfranca.api.repositories.TutorRepository;
 
 @Service
 public class PetService {
-    
+
     private final PetRepository repository;
     private final TutorRepository tutorRepository;
 
@@ -21,16 +21,16 @@ public class PetService {
         this.tutorRepository = tutorRepository;
     }
 
-    private void verificarTutor(String tutorId) {
-        if (tutorId == null || tutorId.isBlank()) {
+    private void verificarTutor(String ownerId) {
+        if (ownerId == null || ownerId.isBlank()) {
             throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST, 
+                HttpStatus.BAD_REQUEST,
                 "O identificador do tutor é obrigatório."
             );
         }
-        if (!tutorRepository.existsById(tutorId)) {
+        if (!tutorRepository.existsById(ownerId)) {
             throw new ResponseStatusException(
-                HttpStatus.NOT_FOUND, 
+                HttpStatus.NOT_FOUND,
                 "Tutor não encontrado."
             );
         }
@@ -44,13 +44,13 @@ public class PetService {
         return repository.findById(id);
     }
 
-    public List<Pet> listarPorTutor(String tutorId) {
-        verificarTutor(tutorId);
-        return repository.findByTutorId(tutorId);
+    public List<Pet> listarPorTutor(String ownerId) {
+        verificarTutor(ownerId);
+        return repository.findByOwnerId(ownerId);
     }
 
     public Pet salvar(Pet pet) {
-        verificarTutor(pet.getTutorId());
+        verificarTutor(pet.getOwnerId());
         return repository.save(pet);
     }
 

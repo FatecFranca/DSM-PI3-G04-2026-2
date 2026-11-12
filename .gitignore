@@ -25,3 +25,10 @@ replay_pid*
 
 # Claude Code (estado local)
 .claude/
+
+# Variáveis de ambiente locais (senhas, URIs)
+.env
+.env.*
+
+CLAUDE.md
+AGENTS.md

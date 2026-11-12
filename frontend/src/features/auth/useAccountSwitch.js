@@ -16,15 +16,20 @@ export function useAccountSwitch() {
   const navigate = useNavigate();
   const toast = useToast();
 
-  const switchTo = (userId, mode, path) => {
-    const user = actions.signInAs(userId, mode);
-    if (!user) {
-      toast.error('Conta não encontrada');
+  const switchTo = async (userId, mode, path) => {
+    try {
+      const user = await actions.signInAs(userId, mode);
+      if (!user) {
+        toast.error('Conta não encontrada');
+        return null;
+      }
+      toast.info(`Você entrou como ${firstName(user.name)}`, mode === APP_MODES.WALKER ? 'Área do dog walker' : 'Área do tutor');
+      navigate(path ?? (mode === APP_MODES.WALKER ? '/dog-walker/hoje' : '/tutor'));
+      return user;
+    } catch (error) {
+      toast.error('Não foi possível trocar de conta', error.message);
       return null;
     }
-    toast.info(`Você entrou como ${firstName(user.name)}`, mode === APP_MODES.WALKER ? 'Área do dog walker' : 'Área do tutor');
-    navigate(path ?? (mode === APP_MODES.WALKER ? '/dog-walker/hoje' : '/tutor'));
-    return user;
   };
 
   return {

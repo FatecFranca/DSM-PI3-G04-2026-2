@@ -7,11 +7,12 @@ import org.springframework.web.bind.annotation.*;
 
 import br.edu.fatecfranca.api.models.Tutor;
 import br.edu.fatecfranca.api.services.TutorService;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/tutores")
 public class TutorController {
-    
+
     private final TutorService service;
 
     public TutorController(TutorService service) {
@@ -31,7 +32,7 @@ public class TutorController {
     }
 
     @PostMapping
-    public ResponseEntity<Tutor> criar(@RequestBody Tutor tutor) {
+    public ResponseEntity<Tutor> criar(@Valid @RequestBody Tutor tutor) {
         Tutor tutorSalvo = service.salvar(tutor);
         return ResponseEntity
                 .status(HttpStatus.CREATED)
@@ -39,7 +40,7 @@ public class TutorController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Tutor> atualizar(@PathVariable String id, @RequestBody Tutor tutor) {
+    public ResponseEntity<Tutor> atualizar(@PathVariable String id, @Valid @RequestBody Tutor tutor) {
         if (service.buscarPorId(id).isEmpty()) {
             return ResponseEntity.notFound().build();
         }
@@ -55,5 +56,11 @@ public class TutorController {
         }
         service.excluir(id);
         return ResponseEntity.noContent().build();
+    }
+
+    /** Liga/desliga um walker nos favoritos do usuário. */
+    @PostMapping("/{id}/favoritos/{walkerId}")
+    public ResponseEntity<Tutor> alternarFavorito(@PathVariable String id, @PathVariable String walkerId) {
+        return ResponseEntity.ok(service.alternarFavorito(id, walkerId));
     }
 }

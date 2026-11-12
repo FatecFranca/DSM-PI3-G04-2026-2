@@ -1,8 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useActions, useData } from '../../context/AppStore';
 import { BOOKING_STATUS as S } from '../bookings/bookingStateMachine';
 import { advanceTracking } from '../../services/trackingService';
-import { transitionBooking } from '../../services/bookingService';
 
 const TICK_MS = 1000;
 const MOVING = [S.ON_THE_WAY, S.WALKING, S.RETURNING];
@@ -16,14 +15,14 @@ const MOVING = [S.ON_THE_WAY, S.WALKING, S.RETURNING];
  */
 export default function TrackingEngine() {
   const data = useData();
-  const { commit } = useActions();
+  const { commit, transitionBooking } = useActions();
+  const autoReturnPendentes = useRef(new Set());
   const hasMoving = data.bookings.some((b) => MOVING.includes(b.status));
 
   useEffect(() => {
     if (!hasMoving) return undefined;
     const id = setInterval(() => {
       commit((state) => {
-        let next = state;
         let changed = false;
         const bookings = state.bookings.map((b) => {
           if (!MOVING.includes(b.status)) return b;
@@ -32,19 +31,19 @@ export default function TrackingEngine() {
           if (phase === 'walk' && b.tracking.walkProgress >= 1) return b;
           const { tracking, crossedReturn } = advanceTracking(b, TICK_MS / 1000, phase);
           changed = true;
-          if (crossedReturn && b.status === S.WALKING) b = { ...b, _autoReturn: true };
+          if (crossedReturn && b.status === S.WALKING && !autoReturnPendentes.current.has(b.id)) {
+            // Voltar para casa é um status real: valida e persiste no backend (Fase 4).
+            autoReturnPendentes.current.add(b.id);
+            transitionBooking(b.id, S.RETURNING, 'system').catch(() => autoReturnPendentes.current.delete(b.id));
+          }
           return { ...b, tracking };
         });
         if (!changed) return state;
-        next = { ...state, bookings: bookings.map(({ _autoReturn, ...b }) => b) };
-        for (const b of bookings) {
-          if (b._autoReturn) next = transitionBooking(next, { bookingId: b.id, to: S.RETURNING, actor: 'system' }).state;
-        }
-        return next;
+        return { ...state, bookings: bookings.map(({ _autoReturn, ...b }) => b) };
       });
     }, TICK_MS);
     return () => clearInterval(id);
-  }, [hasMoving, commit]);
+  }, [hasMoving, commit, transitionBooking]);
 
   return null;
 }

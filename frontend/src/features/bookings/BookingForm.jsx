@@ -55,7 +55,7 @@ export default function BookingForm({ walker, onRequested, className = '' }) {
 
   const clearError = (key) => setErrors((e) => ({ ...e, [key]: undefined, form: undefined }));
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     if (!user) {
       const next = new URLSearchParams(params);
@@ -75,7 +75,7 @@ export default function BookingForm({ walker, onRequested, className = '' }) {
     }
     setSubmitting(true);
     try {
-      const booking = actions.createBooking({ walkerId: walker.id, petId, date, time, duration, notes: notes.trim() });
+      const booking = await actions.createBooking({ walkerId: walker.id, petId, date, time, duration, notes: notes.trim() });
       onRequested?.(booking);
       setTime('');
       setNotes('');
