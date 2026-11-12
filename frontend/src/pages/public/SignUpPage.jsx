@@ -33,9 +33,9 @@ export default function SignUpPage() {
   const submit = (e) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
+    (async () => {
       try {
-        const created = actions.signUp(form);
+        const created = await actions.signUp(form);
         if (form.role === 'walker') {
           toast.success(`Bem-vindo, ${firstName(created.name)}`, 'Complete seu perfil profissional para aparecer nas buscas.');
           navigate('/dog-walker/perfil', { replace: true });
@@ -45,9 +45,10 @@ export default function SignUpPage() {
         }
       } catch (error) {
         setErrors({ [error.field || 'email']: error.message });
+      } finally {
         setLoading(false);
       }
-    }, 450);
+    })();
   };
 
   if (user) {

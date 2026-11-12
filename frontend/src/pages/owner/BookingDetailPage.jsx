@@ -175,10 +175,10 @@ function DemoPanel({ booking }) {
   const next = walkerNextAction(booking.status);
   if (!next) return null;
 
-  const run = () => {
+  const run = async () => {
     try {
-      if (next.requiresCode) actions.confirmPickup(booking.id, booking.pickupCode);
-      else actions.transitionBooking(booking.id, next.to, 'walker');
+      if (next.requiresCode) await actions.confirmPickup(booking.id, booking.pickupCode);
+      else await actions.transitionBooking(booking.id, next.to, 'walker');
       toast.success(`Demonstração: ${STATUS_META[next.to].label}`);
     } catch (error) {
       toast.error('Não foi possível avançar', error.message);

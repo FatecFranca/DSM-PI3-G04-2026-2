@@ -21,7 +21,9 @@ export function SimulatedAuthNotice() {
     <div className="flex gap-3 rounded-2xl border border-info-600/15 bg-info-50 p-3.5 text-[13px] leading-snug text-ink-900">
       <Info size={18} className="mt-0.5 shrink-0 text-info-600" aria-hidden="true" />
       <p>
-        <strong>Autenticação simulada.</strong> Este é um protótipo: a senha só é validada no formato e nunca é armazenada. Não use uma senha real.
+        <strong>Autenticação real.</strong> E-mail e senha são validados pela API do protótipo (hash BCrypt no
+        servidor); a senha nunca é armazenada neste navegador. As contas demonstrativas usam a senha{' '}
+        <strong>senha123</strong>.
       </p>
     </div>
   );
@@ -78,14 +80,15 @@ export default function SignInPage() {
   const submit = (e) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
+    (async () => {
       try {
-        finish(actions.signIn(form, role));
+        finish(await actions.signIn(form, role));
       } catch (error) {
         setErrors({ [error.field || 'email']: error.message });
+      } finally {
         setLoading(false);
       }
-    }, 450);
+    })();
   };
 
   const update = (field) => (e) => {
@@ -134,7 +137,13 @@ export default function SignInPage() {
               <li key={account.userId}>
                 <button
                   type="button"
-                  onClick={() => finish(actions.signInAs(account.userId, role))}
+                  onClick={async () => {
+                    try {
+                      finish(await actions.signInAs(account.userId, role));
+                    } catch (error) {
+                      toast.error('Não foi possível entrar', error.message);
+                    }
+                  }}
                   className="flex w-full items-center gap-3 rounded-2xl border border-sand-200 bg-white p-3 text-left transition hover:border-ink-900/40 hover:shadow-card"
                 >
                   <Avatar src={demoUser.avatar} name={demoUser.name} size={44} />
@@ -185,7 +194,7 @@ export default function SignInPage() {
           </div>
         </Field>
         <p className="text-[13px] text-ink-600">
-          Dica: use <strong>{EMAIL_HINT[role]}</strong> e qualquer senha com 6 caracteres.
+          Dica: use <strong>{EMAIL_HINT[role]}</strong> e a senha <strong>senha123</strong>.
         </p>
         <Button type="submit" fullWidth size="lg" loading={loading}>
           Entrar

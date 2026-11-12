@@ -267,14 +267,14 @@ function PickupCodeDialog({ open, onClose, booking, onConfirm }) {
     setError('');
     onClose();
   };
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     if (code.length !== 4) {
       setError('Digite os 4 números do código.');
       return;
     }
     try {
-      onConfirm(code);
+      await onConfirm(code);
       close();
     } catch (err) {
       setError(err.message);

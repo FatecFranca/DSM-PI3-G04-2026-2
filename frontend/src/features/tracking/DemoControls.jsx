@@ -18,12 +18,12 @@ export default function DemoControls({ booking, className = '', tone = 'light' }
   const ownerStep = ownerNextAction(booking.status);
   const canAccelerate = [S.ON_THE_WAY, S.WALKING, S.RETURNING].includes(booking.status);
 
-  const advance = () => {
+  const advance = async () => {
     if (!walkerStep) return;
     try {
-      if (walkerStep.requiresCode) actions.confirmPickup(booking.id, booking.pickupCode);
-      else if (walkerStep.to === S.ACCEPTED) actions.acceptBooking(booking.id);
-      else actions.transitionBooking(booking.id, walkerStep.to, 'walker');
+      if (walkerStep.requiresCode) await actions.confirmPickup(booking.id, booking.pickupCode);
+      else if (walkerStep.to === S.ACCEPTED) await actions.acceptBooking(booking.id);
+      else await actions.transitionBooking(booking.id, walkerStep.to, 'walker');
       toast.info(`Simulação: ${STATUS_META[walkerStep.to].label}`);
     } catch (error) {
       toast.error('Etapa não permitida', error.message);

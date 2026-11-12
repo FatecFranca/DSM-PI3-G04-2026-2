@@ -16,13 +16,13 @@ export default function ReviewForm({ booking, onDone, compact = false }) {
   const { review } = useBookingActions();
   const shown = hover || rating;
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     if (!rating) {
       setError('Escolha de 1 a 5 estrelas.');
       return;
     }
-    const result = review(booking.id, rating, comment);
+    const result = await review(booking.id, rating, comment);
     if (result) onDone?.(result);
   };
 

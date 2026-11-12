@@ -9,9 +9,9 @@ export function useBookingActions() {
   const actions = useActions();
   const toast = useToast();
 
-  const run = (fn, successTitle, successDescription) => {
+  const run = async (fn, successTitle, successDescription) => {
     try {
-      const result = fn();
+      const result = await fn();
       if (successTitle) toast.success(successTitle, successDescription);
       return result ?? true;
     } catch (error) {
@@ -26,9 +26,9 @@ export function useBookingActions() {
     cancel: (id, actor = 'owner') => run(() => actions.cancelBooking(id, actor), 'Passeio cancelado'),
     pay: (id, methodId) => run(() => actions.payBooking(id, methodId), 'Pagamento confirmado', 'Metade vai para o dog walker agora e a outra metade quando ele finalizar o passeio.'),
     advance: (id, to, actor = 'walker', successTitle) => run(() => actions.transitionBooking(id, to, actor), successTitle),
-    confirmPickup: (id, code) => {
+    confirmPickup: async (id, code) => {
       // Errors here are shown inline by the caller, so rethrow instead of toasting
-      const booking = actions.confirmPickup(id, code);
+      const booking = await actions.confirmPickup(id, code);
       toast.success('Retirada confirmada');
       return booking;
     },

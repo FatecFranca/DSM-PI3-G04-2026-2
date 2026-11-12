@@ -28,8 +28,8 @@ export default function PaymentSheet({ booking, open, onClose, onPaid }) {
   const submit = () => {
     setProcessing(true);
     // Simulated processing delay
-    setTimeout(() => {
-      const result = pay(booking.id, methodId);
+    setTimeout(async () => {
+      const result = await pay(booking.id, methodId);
       setProcessing(false);
       if (result) {
         onPaid?.(result);

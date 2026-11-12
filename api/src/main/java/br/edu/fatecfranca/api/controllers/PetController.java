@@ -35,7 +35,6 @@ public class PetController {
     public List<Pet> listarPorTutor(@PathVariable String tutorId) {
         return service.listarPorTutor(tutorId);
     }
-
     @PostMapping
     public ResponseEntity<Pet> criar(@Valid @RequestBody Pet pet) {
         Pet petSalvo = service.salvar(pet);
