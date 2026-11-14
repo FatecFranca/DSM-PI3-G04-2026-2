@@ -18,8 +18,8 @@ cd api
 mvnw.cmd spring-boot:run    # Windows (Linux/macOS: ./mvnw spring-boot:run)
 ```
 
-- A URI do MongoDB vem da variável de ambiente `MONGODB_URI` (padrão em `api/src/main/resources/application.properties`).
-- O banco é um **cluster Atlas remoto**: exige internet e o IP da máquina liberado no Network Access do Atlas — sem isso nada conecta.
+A URI do MongoDB deve ser configurada pela variável de ambiente MONGODB_URI. O arquivo api/src/main/resources/application.properties referencia essa variável, sem armazenar credenciais.- O banco é um **cluster Atlas remoto**: exige internet e o IP da máquina liberado no Network Access do Atlas — sem isso nada conecta.
+
 - Verificação: `mvnw.cmd test` (os testes conectam no Atlas real).
 
 ### 2. Frontend (a partir de `frontend/`)
@@ -71,3 +71,50 @@ Senha de todas: **`senha123`** (login real via `POST /auth/login`).
 
 - **`frontend/README.md`** — arquitetura do front: rotas, máquina de estados, cenários de demonstração (A–E) e detalhes de implementação.
 - **`AGENTS.md`** — instruções e gotchas para agentes de IA trabalhando neste repositório.
+
+## Deploy e demonstração online
+
+O projeto Rolê de Pet está disponível publicamente para demonstração, utilizando serviços gratuitos de hospedagem.
+
+### Links de acesso
+
+- **Aplicação web:** https://role-de-pet.vercel.app/
+- **API REST:** https://dsm-pi3-g04-2026-2.onrender.com
+- **Exemplo de endpoint:** https://dsm-pi3-g04-2026-2.onrender.com/walkers
+
+### Infraestrutura utilizada
+
+| Componente | Plataforma | Tecnologia |
+|---|---|---|
+| Frontend | Vercel | React 19 + Vite 8 |
+| Backend | Render | Java 25 + Spring Boot 4.1.2 |
+| Banco de dados | MongoDB Atlas | MongoDB |
+| Versionamento | GitHub | Git |
+
+### Configurações de hospedagem
+
+**Backend (Render)**
+
+- Deploy utilizando Docker e Maven.
+- Porta configurada dinamicamente pela variável `PORT`.
+- Conexão com o MongoDB pela variável `MONGODB_URI`.
+- CORS configurável pela variável `FRONTEND_URL`.
+- Deploy vinculado à branch `feat/deploy-vercel`.
+
+**Frontend (Vercel)**
+
+- Compilação de produção realizada com `npm run build`.
+- Publicação dos arquivos estáticos da pasta `dist`.
+- Comunicação com a API pela variável `VITE_API_URL`.
+- Publicação inicial realizada manualmente via Vercel Drop.
+
+### Observações importantes
+
+- A API utiliza o plano gratuito do Render, podendo entrar em suspensão após períodos de inatividade. O primeiro acesso pode apresentar demora.
+- A publicação do frontend foi realizada manualmente. Novas alterações no GitHub não atualizam automaticamente o site na Vercel.
+- As credenciais do banco devem ser configuradas por variáveis de ambiente, sem inclusão de senhas no código-fonte.
+- A aplicação e sua integração com o MongoDB foram testadas após a publicação.
+
+### Finalidade
+
+A hospedagem foi configurada para permitir a demonstração remota do Projeto Integrador III, do curso de Desenvolvimento de Software Multiplataforma da Fatec Franca.
